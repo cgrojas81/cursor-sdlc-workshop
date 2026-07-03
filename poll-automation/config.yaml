@@ -12,9 +12,10 @@ margin:
   max_lead_pct: 3.0
 
 timing:
-  poll_load_timeout_sec: 45
-  iframe_load_timeout_sec: 45
-  page_settle_sec: 3
+  poll_load_timeout_sec: 60
+  iframe_load_timeout_sec: 90
+  page_settle_sec: 5
+  post_scroll_wait_sec: 10
   # Random range [min, max] seconds between vote attempts when controller wants a vote
   vote_delay_sec: [120, 480]
   # Random range [min, max] seconds between monitor-only checks (when in band or paused)

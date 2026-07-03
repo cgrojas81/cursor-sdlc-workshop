@@ -151,20 +151,24 @@ async def create_context(browser: Browser, cfg: dict[str, Any], proxy: str | Non
     return await browser.new_context(**kwargs)
 
 
-async def find_poll_frame(page: Page):
-    from .browser import find_poll_frame as _find
-
-    timing = {"iframe_load_timeout_sec": 45}
-    return await _find(page, timeout_ms=timing["iframe_load_timeout_sec"] * 1000)
-
-
-async def submit_vote(page: Page, cfg: dict[str, Any], *, full_navigation: bool) -> Standings:
+async def submit_vote(
+    page: Page,
+    cfg: dict[str, Any],
+    *,
+    full_navigation: bool,
+    debug_dir: Path | None = None,
+) -> Standings:
     """Vote for target candidate and return parsed standings."""
     target = cfg["target"]
     if full_navigation:
-        frame = await navigate_and_prepare_poll(page, cfg["poll"]["url"], cfg)
+        frame = await navigate_and_prepare_poll(
+            page, cfg["poll"]["url"], cfg, debug_dir=debug_dir
+        )
     else:
-        frame = await find_poll_frame(page)
+        from .browser import find_poll_frame as _find_poll_frame
+
+        timeout = int(cfg["timing"].get("iframe_load_timeout_sec", 90)) * 1000
+        frame = await _find_poll_frame(page, timeout_ms=timeout, debug_dir=debug_dir)
 
     await select_target_candidate(frame, target["name_match"], target.get("school_match"))
     await asyncio.sleep(random.uniform(0.6, 1.8))
@@ -201,10 +205,12 @@ async def run_session(
     *,
     once: bool = False,
     force_vote: bool = False,
+    debug: bool = False,
 ) -> None:
     rotator = ProxyRotator(cfg)
     browser_cfg = cfg.get("browser", {})
     target_name = cfg["target"]["name_match"]
+    debug_dir = (ROOT / "data" / "debug") if debug else None
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -225,7 +231,7 @@ async def run_session(
                 try:
                     # Percentages only appear after voting — each check submits one vote.
                     standings = await submit_vote(
-                        page, cfg, full_navigation=not on_results_page
+                        page, cfg, full_navigation=not on_results_page, debug_dir=debug_dir
                     )
                     if not force_vote:
                         on_results_page = True
@@ -277,6 +283,11 @@ def main() -> None:
         action="store_true",
         help="Cast a single test vote and print standings",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Save screenshot + iframe list on failure (data/debug/)",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -293,6 +304,7 @@ def main() -> None:
             state_path,
             once=args.once or args.force_vote,
             force_vote=args.force_vote,
+            debug=args.debug,
         )
     )
 
