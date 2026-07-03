@@ -16,10 +16,9 @@ import yaml
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from .browser import (
-    click_vote_button,
+    cast_vote,
     navigate_and_prepare_poll,
     return_to_poll,
-    select_target_candidate,
 )
 from .controller import Action, ControllerState, Decision, decide
 from .monitor import Standings, compute_lead_pct, find_target, parse_standings_from_dom
@@ -170,10 +169,7 @@ async def submit_vote(
         timeout = int(cfg["timing"].get("iframe_load_timeout_sec", 90)) * 1000
         frame = await _find_poll_frame(page, timeout_ms=timeout, debug_dir=debug_dir)
 
-    await select_target_candidate(frame, target["name_match"], target.get("school_match"))
-    await asyncio.sleep(random.uniform(0.6, 1.8))
-    await click_vote_button(frame)
-    await asyncio.sleep(random.uniform(2.5, 5.0))
+    await cast_vote(frame, target["name_match"], target.get("school_match"))
     return await parse_standings_from_dom(frame)
 
 

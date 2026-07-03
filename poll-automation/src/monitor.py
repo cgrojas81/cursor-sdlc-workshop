@@ -230,6 +230,12 @@ async def parse_standings_from_dom(frame: Frame) -> Standings:
     final = list(deduped.values())
     if not final:
         body = await get_frame_body_text(frame)
+        if body.count("%") < 1:
+            raise ValueError(
+                "Still on the voting form (no percentages visible). "
+                "Vote may not have submitted. "
+                f"Body preview: {body[:500]!r}"
+            )
         raise ValueError(
             "Could not parse standings from results DOM. "
             f"Body preview: {body[:800]!r}"

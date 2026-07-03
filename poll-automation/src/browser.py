@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import re
 from pathlib import Path
 from typing import Any
@@ -309,45 +310,128 @@ async def wait_for_poll_options(frame: Frame, timeout_ms: int) -> None:
     raise PlaywrightTimeout(f"Poll options not visible within {timeout_ms}ms")
 
 
+async def is_results_view(frame: Frame) -> bool:
+    body = await get_frame_body_text(frame)
+    if not body:
+        return False
+    pct_count = body.count("%")
+    lower = body.lower()
+    return pct_count >= 2 or (
+        pct_count >= 1 and "return to the poll" in lower
+    )
+
+
+async def wait_for_results(frame: Frame, timeout_ms: int = 60000) -> None:
+    """Wait until post-vote standings (percentages) appear in the iframe."""
+    logger.info("Waiting for results after vote...")
+    deadline = asyncio.get_event_loop().time() + (timeout_ms / 1000)
+    while asyncio.get_event_loop().time() < deadline:
+        if await is_results_view(frame):
+            body = await get_frame_body_text(frame)
+            logger.info("Results loaded (%s '%%' markers in body)", body.count("%"))
+            return
+        await asyncio.sleep(1)
+    body = await get_frame_body_text(frame)
+    raise PlaywrightTimeout(
+        "Results never appeared after voting. "
+        f"Still showing voting form? preview={body[:400]!r}"
+    )
+
+
+async def verify_candidate_selected(frame: Frame, name_match: str) -> None:
+    checked = frame.locator('input[type="radio"]:checked')
+    if await checked.count() == 0:
+        raise ValueError(f"Radio not selected for {name_match}")
+    logger.info("Confirmed radio selected for %s", name_match)
+
+
 async def select_target_candidate(
     frame: Frame, name_match: str, school_match: str | None = None
 ) -> None:
-    """Click the radio button for the target player."""
-    labels = frame.locator("label")
-    count = await labels.count()
-    target_idx: int | None = None
+    """Click the radio button for the target player (scroll inside iframe if needed)."""
+    radios = frame.locator('input[type="radio"]')
+    count = await radios.count()
+    logger.info("Searching %s radio options for %s", count, name_match)
 
     for i in range(count):
-        text = (await labels.nth(i).inner_text()).strip()
-        normalized = re.sub(r"\s+", " ", text)
-        if name_match.lower() in normalized.lower():
-            if school_match and school_match.lower() not in normalized.lower():
-                continue
-            target_idx = i
-            break
+        radio = radios.nth(i)
+        label_text = ""
 
-    if target_idx is None:
-        candidate = frame.locator(f"text=/{re.escape(name_match)}/i").first
-        await candidate.wait_for(state="visible", timeout=15000)
-        await candidate.click()
+        radio_id = await radio.get_attribute("id")
+        if radio_id:
+            label = frame.locator(f'label[for="{radio_id}"]')
+            if await label.count() > 0:
+                label_text = (await label.first.inner_text()).strip()
+
+        if not label_text:
+            row = radio.locator("xpath=ancestor::*[self::li or self::div or self::tr][1]")
+            if await row.count() > 0:
+                label_text = (await row.first.inner_text()).strip()
+
+        normalized = re.sub(r"\s+", " ", label_text)
+        if name_match.lower() not in normalized.lower():
+            continue
+        if school_match and school_match.lower() not in normalized.lower():
+            continue
+
+        await radio.scroll_into_view_if_needed()
+        await asyncio.sleep(0.3)
+        try:
+            await radio.check(force=True)
+        except Exception:
+            await radio.click(force=True)
+        await verify_candidate_selected(frame, name_match)
+        logger.info("Selected candidate: %s", normalized[:100])
         return
 
-    label = labels.nth(target_idx)
-    await label.scroll_into_view_if_needed()
-    await label.click()
+    # Fallback: click visible text (long list may need scroll)
+    text_hit = frame.get_by_text(re.compile(re.escape(name_match), re.I)).first
+    await text_hit.scroll_into_view_if_needed(timeout=15000)
+    await text_hit.click()
+    await asyncio.sleep(0.5)
+    try:
+        await verify_candidate_selected(frame, name_match)
+    except ValueError:
+        # Click associated radio near the text
+        near = frame.locator(
+            f'xpath=//*[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{name_match.lower()}")]//input[@type="radio"]'
+        )
+        if await near.count() > 0:
+            await near.first.check(force=True)
+            await verify_candidate_selected(frame, name_match)
+            return
+        raise ValueError(f"Could not select candidate: {name_match}")
 
 
 async def click_vote_button(frame: Frame) -> None:
     """Submit the poll vote."""
-    vote_btn = frame.get_by_role("button", name=re.compile(r"^vote$", re.I))
-    if await vote_btn.count() == 0:
-        vote_btn = frame.get_by_role("button", name=re.compile(r"vote", re.I))
-    if await vote_btn.count() == 0:
-        vote_btn = frame.locator(
-            'button:has-text("Vote"), input[type="submit"][value*="Vote" i]'
-        )
-    await vote_btn.first.scroll_into_view_if_needed()
-    await vote_btn.first.click()
+    selectors = [
+        frame.get_by_role("button", name=re.compile(r"^vote$", re.I)),
+        frame.get_by_role("button", name=re.compile(r"vote", re.I)),
+        frame.locator('input[type="submit"]'),
+        frame.locator('[role="button"]:has-text("Vote")'),
+        frame.locator('button:has-text("Vote"), a:has-text("Vote")'),
+    ]
+    vote_btn = None
+    for loc in selectors:
+        if await loc.count() > 0:
+            vote_btn = loc.first
+            break
+    if vote_btn is None:
+        raise PlaywrightTimeout("Vote button not found in poll iframe")
+
+    await vote_btn.scroll_into_view_if_needed()
+    await vote_btn.wait_for(state="visible", timeout=10000)
+    await vote_btn.click()
+    logger.info("Clicked Vote button")
+
+
+async def cast_vote(frame: Frame, name_match: str, school_match: str | None) -> None:
+    """Select candidate, submit vote, and wait for results."""
+    await select_target_candidate(frame, name_match, school_match)
+    await asyncio.sleep(random.uniform(0.8, 1.5))
+    await click_vote_button(frame)
+    await wait_for_results(frame, timeout_ms=60000)
 
 
 async def return_to_poll(frame: Frame) -> None:
