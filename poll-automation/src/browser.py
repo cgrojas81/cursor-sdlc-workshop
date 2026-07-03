@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # PollUnit and other common newspaper poll hosts
 POLL_IFRAME_SRC_HINTS = (
+    "usatodaynetworkservice.com",
     "pollunit.com",
     "crowdsignal",
     "polldaddy",
@@ -21,6 +22,7 @@ POLL_IFRAME_SRC_HINTS = (
     "poll.",
     "vote.",
     "embed",
+    "tangstatic",
 )
 
 POPUP_CLOSE_SELECTORS = [
@@ -120,6 +122,41 @@ async def wait_for_poll_embed(page: Page, timeout_ms: int) -> None:
     raise PlaywrightTimeout(f"No poll embed marker in DOM within {timeout_ms}ms")
 
 
+async def get_frame_body_text(frame: Frame) -> str:
+    """Read frame text when multiple <body> nodes exist (nested mini-DOM)."""
+    best = ""
+    bodies = frame.locator("body")
+    try:
+        count = await bodies.count()
+        for i in range(count):
+            try:
+                text = (await bodies.nth(i).inner_text()).strip()
+                if len(text) > len(best):
+                    best = text
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    if best:
+        return best
+
+    try:
+        return await frame.evaluate(
+            """() => {
+                const bodies = document.querySelectorAll('body');
+                let merged = '';
+                for (const b of bodies) {
+                    const t = (b.innerText || '').trim();
+                    if (t.length > merged.length) merged = t;
+                }
+                return merged || (document.body ? document.body.innerText : '');
+            }"""
+        )
+    except Exception:
+        return ""
+
+
 async def _frame_has_poll_ui(frame: Frame) -> bool:
     """Return True if this frame looks like the voting UI."""
     try:
@@ -130,8 +167,11 @@ async def _frame_has_poll_ui(frame: Frame) -> bool:
         pass
 
     try:
-        body = await frame.locator("body").inner_text(timeout=3000)
+        body = await get_frame_body_text(frame)
     except Exception:
+        return False
+
+    if not body:
         return False
 
     lower = body.lower()
@@ -143,6 +183,8 @@ async def _frame_has_poll_ui(frame: Frame) -> bool:
         "markella",
         "return to the poll",
         "villa joseph",
+        "phillyburbs",
+        "top freshman",
     )
     hits = sum(1 for s in signals if s in lower)
     return hits >= 2 or ("vote" in lower and len(body) > 80)
