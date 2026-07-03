@@ -1,0 +1,8 @@
+# Optional residential proxies — one per line.
+# Format: http://user:pass@host:port  or  socks5://host:port
+#
+# Example:
+# http://user:pass@proxy1.example.com:8080
+# http://user:pass@proxy2.example.com:8080
+#
+# Or set comma-separated PROXY_LIST env var instead.

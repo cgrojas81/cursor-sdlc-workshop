@@ -1,0 +1,8 @@
+# Playwright browser cache (local)
+.playwright/
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/
+*.log
