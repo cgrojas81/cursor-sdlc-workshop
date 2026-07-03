@@ -27,6 +27,17 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 
+STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+window.chrome = { runtime: {} };
+"""
+
+CHROMIUM_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+]
+
 
 def load_config(path: Path) -> dict[str, Any]:
     with path.open() as f:
@@ -34,14 +45,20 @@ def load_config(path: Path) -> dict[str, Any]:
 
 
 def setup_logging(log_file: Path | None) -> None:
+    class FlushingFileHandler(logging.FileHandler):
+        def emit(self, record: logging.LogRecord) -> None:
+            super().emit(record)
+            self.flush()
+
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_file))
+        handlers.append(FlushingFileHandler(log_file))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=handlers,
+        force=True,
     )
 
 
@@ -289,6 +306,9 @@ def main() -> None:
     cfg = load_config(args.config)
     log_path = ROOT / cfg.get("logging", {}).get("log_file", "data/run.log")
     setup_logging(log_path)
+
+    logger.info("=== Poll bot process start PID=%s ===", os.getpid())
+    logger.info("Using config: %s", args.config.resolve())
 
     state_path = ROOT / cfg.get("logging", {}).get("state_file", "data/state.json")
     state = load_state(state_path)

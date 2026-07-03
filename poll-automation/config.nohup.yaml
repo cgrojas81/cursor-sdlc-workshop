@@ -1,0 +1,34 @@
+poll:
+  url: "https://www.phillyburbs.com/story/sports/high-school/softball/2026/06/29/vote-bucks-county-top-freshman-softball-player-class-of-2029-pennsbury-neshaminy-quakertown/89896794007/"
+  deadline: "2026-07-07T20:00:00-04:00"
+
+target:
+  name_match: "Markella Hadgimallis"
+  school_match: "Villa Joseph Marie"
+
+margin:
+  min_lead_pct: 2.0
+  max_lead_pct: 3.0
+
+timing:
+  poll_load_timeout_sec: 60
+  iframe_load_timeout_sec: 90
+  page_settle_sec: 5
+  post_scroll_wait_sec: 10
+  vote_delay_sec: [120, 480]
+  monitor_delay_sec: [900, 1800]
+  max_votes_per_hour: 4
+  max_votes_per_day: 60
+  ramp_hours: 48
+
+browser:
+  # Mac background: use headed mode (same as successful --force-vote test).
+  # Headless was failing silently under nohup on macOS.
+  headless: false
+  slow_mo_ms: 50
+  storage_state: null
+  proxy: null
+
+logging:
+  state_file: "data/state.json"
+  log_file: "data/run.log"
