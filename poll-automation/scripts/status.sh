@@ -1,27 +1,35 @@
 #!/usr/bin/env bash
-# Verify the background bot is recording votes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "=== Process ==="
+echo "=== Daemon ==="
 if [[ -f data/bot.pid ]] && kill -0 "$(cat data/bot.pid)" 2>/dev/null; then
   echo "RUNNING  PID $(cat data/bot.pid)"
 else
   echo "NOT RUNNING"
-  pgrep -fl "run.py" || true
 fi
 
 echo ""
-echo "=== Vote successes in log ==="
+echo "=== Votes ==="
 SUCCESS=$(grep -c "Results loaded" data/run.log 2>/dev/null || echo 0)
-ERRORS=$(grep -c "Cycle error" data/run.log 2>/dev/null || echo 0)
-echo "Results loaded: $SUCCESS"
-echo "Cycle errors:   $ERRORS"
+CYCLES=$(grep -c "Cycle start" data/run.log 2>/dev/null || echo 0)
+ERRORS=$(grep -c "Cycle failed" data/run.log 2>/dev/null || echo 0)
+echo "Successful results: $SUCCESS"
+echo "Cycle starts:         $CYCLES"
+echo "Cycle failures:       $ERRORS"
 
 echo ""
 echo "=== State ==="
-cat data/state.json 2>/dev/null || echo "(no state file)"
+cat data/state.json 2>/dev/null || echo "(none)"
 
 echo ""
-echo "=== Last 8 log lines ==="
-tail -8 data/run.log 2>/dev/null || echo "(no log)"
+echo "=== Scheduler ==="
+cat data/scheduler.json 2>/dev/null || echo "(none)"
+
+echo ""
+echo "=== Heartbeat ==="
+cat data/heartbeat.json 2>/dev/null || echo "(none)"
+
+echo ""
+echo "=== Last 10 log lines ==="
+tail -10 data/run.log 2>/dev/null || echo "(no log)"

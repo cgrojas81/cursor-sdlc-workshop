@@ -3,17 +3,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PIDFILE="data/bot.pid"
 
-if [[ ! -f "$PIDFILE" ]]; then
-  echo "No PID file — bot may not be running."
-  pkill -f "run.py --config config.nohup.yaml" 2>/dev/null || true
-  exit 0
+stop_pid() {
+  local pid="$1"
+  # Kill child processes (caffeinate / bash loop / python)
+  pkill -P "$pid" 2>/dev/null || true
+  kill "$pid" 2>/dev/null || true
+}
+
+if [[ -f "$PIDFILE" ]]; then
+  PID="$(cat "$PIDFILE")"
+  if kill -0 "$PID" 2>/dev/null; then
+    stop_pid "$PID"
+    echo "Stopped daemon PID $PID"
+  fi
+  rm -f "$PIDFILE"
 fi
 
-PID="$(cat "$PIDFILE")"
-if kill -0 "$PID" 2>/dev/null; then
-  kill "$PID"
-  echo "Stopped bot (PID $PID)"
-else
-  echo "PID $PID not running"
-fi
-rm -f "$PIDFILE"
+pkill -f "run.py --config config.nohup.yaml" 2>/dev/null || true
+pkill -f "run.py --once --config config.nohup.yaml" 2>/dev/null || true
+echo "Done."

@@ -22,10 +22,11 @@ timing:
   ramp_hours: 48
 
 browser:
-  # Mac background: use headed mode (same as successful --force-vote test).
-  # Headless was failing silently under nohup on macOS.
+  # Headed mode matched your successful manual test on Mac.
   headless: false
   slow_mo_ms: 50
+  # Use installed Google Chrome if Playwright Chromium is unstable:
+  # channel: chrome
   storage_state: null
   proxy: null
 

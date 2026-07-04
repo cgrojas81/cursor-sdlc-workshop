@@ -1,39 +1,43 @@
 #!/usr/bin/env bash
-# Start poll bot in background on Mac (user must stay logged in; lid open or clamshell + external display).
+# Long-running daemon: one fresh browser per vote, survives crashes, prevents Mac sleep.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${POLL_CONFIG:-config.nohup.yaml}"
 LOG="data/run.log"
 PIDFILE="data/bot.pid"
 
 mkdir -p data
 
 if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-  echo "Bot already running (PID $(cat "$PIDFILE")). Run scripts/stop-nohup.sh first."
+  echo "Already running (PID $(cat "$PIDFILE")). Run ./scripts/stop-nohup.sh first."
   exit 1
 fi
 
-# Quick headless smoke test optional — skip, go straight to start
-
 {
   echo ""
-  echo "========== BOT START $(date) =========="
-  echo "Config: $CONFIG"
+  echo "========== DAEMON START $(date) =========="
 } >> "$LOG"
 
 export PYTHONUNBUFFERED=1
-nohup python3 -u run.py --config "$CONFIG" >> "$LOG" 2>&1 &
-echo $! > "$PIDFILE"
+LOOP="$(pwd)/scripts/daemon-loop.sh"
+chmod +x "$LOOP"
 
-sleep 2
-if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-  echo "Started poll bot PID $(cat "$PIDFILE")"
-  echo "Watch: tail -f $LOG"
-  echo "Stop:  ./scripts/stop-nohup.sh"
+if command -v caffeinate >/dev/null 2>&1; then
+  nohup caffeinate -dimsu -i "$LOOP" >> "$LOG" 2>&1 &
 else
-  echo "Bot exited immediately — check $LOG"
-  tail -20 "$LOG"
+  nohup "$LOOP" >> "$LOG" 2>&1 &
+fi
+
+echo $! > "$PIDFILE"
+sleep 2
+
+if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+  echo "Daemon started PID $(cat "$PIDFILE")"
+  echo "Status: ./scripts/status.sh"
+  echo "Stop:   ./scripts/stop-nohup.sh"
+else
+  echo "Daemon failed — check $LOG"
+  tail -30 "$LOG"
   rm -f "$PIDFILE"
   exit 1
 fi

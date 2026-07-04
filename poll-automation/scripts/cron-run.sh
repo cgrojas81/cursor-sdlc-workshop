@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${POLL_CONFIG:-config.cloud.yaml}"
+CONFIG="${POLL_CONFIG:-config.nohup.yaml}"
 STATE="data/state.json"
 
 mkdir -p data
