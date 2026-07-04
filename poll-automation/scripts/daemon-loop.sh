@@ -3,10 +3,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${POLL_CONFIG:-config.nohup.yaml}"
+CONFIG="${POLL_CONFIG:-config.aggressive.yaml}"
 LOG="data/run.log"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
+
+proxy_count() {
+  local n=0
+  [[ -f proxies.txt ]] && n=$(grep -cve '^\s*$' -e '^\s*#' proxies.txt || true)
+  if [[ -n "${PROXY_LIST:-}" ]]; then
+    n=$((n + $(echo "$PROXY_LIST" | tr ',' '\n' | grep -c . || true)))
+  fi
+  echo "$n"
+}
+
+log "Daemon loop config=$CONFIG proxies=$(proxy_count)"
+if [[ "$(proxy_count)" -eq 0 ]]; then
+  log "WARNING: no proxies configured — aggressive mode uses a single IP (high block risk)"
+fi
 
 while true; do
   if ! python3 - "$CONFIG" <<'PY'

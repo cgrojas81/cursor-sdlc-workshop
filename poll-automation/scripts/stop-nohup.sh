@@ -19,6 +19,8 @@ if [[ -f "$PIDFILE" ]]; then
   rm -f "$PIDFILE"
 fi
 
+pkill -f "run.py --config config.aggressive.yaml" 2>/dev/null || true
+pkill -f "run.py --once --config config.aggressive.yaml" 2>/dev/null || true
 pkill -f "run.py --config config.nohup.yaml" 2>/dev/null || true
 pkill -f "run.py --once --config config.nohup.yaml" 2>/dev/null || true
 echo "Done."

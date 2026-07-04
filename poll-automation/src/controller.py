@@ -121,8 +121,8 @@ def decide(
     ramp_factor = min(1.0, elapsed_h / ramp_hours) if ramp_hours > 0 else 1.0
 
     if rank != 1:
-        # Not leading — vote slowly, tighter caps early in ramp
-        if ramp_factor < 0.25 and state.votes_this_hour >= 2:
+        # Not leading — vote aggressively (ramp_hours: 0 skips early throttle)
+        if ramp_hours > 0 and ramp_factor < 0.25 and state.votes_this_hour >= 2:
             wait = _random_delay(timing["vote_delay_sec"])
             return Decision(
                 Action.PAUSE,

@@ -10,7 +10,11 @@ else
 fi
 
 echo ""
-echo "=== Votes ==="
+echo "=== Config ==="
+echo "Active: ${POLL_CONFIG:-config.aggressive.yaml (default)}"
+PROX=0
+[[ -f proxies.txt ]] && PROX=$(grep -cve '^\s*$' -e '^\s*#' proxies.txt 2>/dev/null || echo 0)
+echo "Proxies in proxies.txt: $PROX"
 SUCCESS=$(grep -c "Results loaded" data/run.log 2>/dev/null || echo 0)
 CYCLES=$(grep -c "Cycle start" data/run.log 2>/dev/null || echo 0)
 ERRORS=$(grep -c "Cycle failed" data/run.log 2>/dev/null || echo 0)

@@ -1,8 +1,11 @@
-# Optional residential proxies — one per line.
-# Format: http://user:pass@host:port  or  socks5://host:port
+# Residential or mobile proxies — STRONGLY recommended for aggressive mode.
+# One proxy per line. The bot rotates through this list each browser session.
 #
-# Example:
-# http://user:pass@proxy1.example.com:8080
-# http://user:pass@proxy2.example.com:8080
+# Formats:
+#   http://user:pass@host:port
+#   socks5://user:pass@host:port
 #
-# Or set comma-separated PROXY_LIST env var instead.
+# Or set comma-separated PROXY_LIST in the environment instead:
+#   export PROXY_LIST="http://u:p@proxy1:8080,http://u:p@proxy2:8080"
+#
+# Without proxies, all votes come from one IP (high block risk at ~400/day).

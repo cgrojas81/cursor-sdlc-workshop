@@ -33,8 +33,14 @@ sleep 2
 
 if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   echo "Daemon started PID $(cat "$PIDFILE")"
+  echo "Config: ${POLL_CONFIG:-config.aggressive.yaml}"
   echo "Status: ./scripts/status.sh"
   echo "Stop:   ./scripts/stop-nohup.sh"
+  if [[ ! -f proxies.txt ]] && [[ -z "${PROXY_LIST:-}" ]]; then
+    echo ""
+    echo "WARNING: No proxies.txt — add residential proxies before heavy voting."
+    echo "  cp proxies.txt.example proxies.txt   # then edit"
+  fi
 else
   echo "Daemon failed — check $LOG"
   tail -30 "$LOG"
