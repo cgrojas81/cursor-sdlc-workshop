@@ -15,7 +15,11 @@ from typing import Any
 import yaml
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-from .browser import cast_vote, navigate_and_prepare_poll
+from .browser import (
+    cast_vote,
+    navigate_and_prepare_poll,
+    return_to_poll,
+)
 from .controller import Action, ControllerState, Decision, decide
 from .monitor import Standings, compute_lead_pct, parse_standings_from_dom
 from .scheduler import (
@@ -180,19 +184,6 @@ async def launch_browser(playwright, cfg: dict[str, Any]):
     return await playwright.chromium.launch(**launch_kwargs)
 
 
-async def submit_vote(
-    page: Page,
-    cfg: dict[str, Any],
-    *,
-    debug_dir: Path | None = None,
-) -> Standings:
-    frame = await navigate_and_prepare_poll(
-        page, cfg["poll"]["url"], cfg, debug_dir=debug_dir
-    )
-    await cast_vote(frame, cfg["target"]["name_match"], cfg["target"].get("school_match"))
-    return await parse_standings_from_dom(frame)
-
-
 def log_standings(standings: Standings, target_name: str) -> None:
     lead, target = compute_lead_pct(standings, target_name)
     logger.info("--- Standings (%s) ---", standings.captured_via)
@@ -213,10 +204,19 @@ async def run_one_cycle(
     debug: bool = False,
     proxy: str | None = None,
 ) -> Decision | None:
-    """Launch browser, vote once, tear down completely. Returns controller decision."""
+    """
+    Launch browser, vote one or more times in the same poll iframe session.
+
+    First vote loads the article page; follow-up votes use "Return to the poll!"
+    in the iframe (same as manual revoting).
+    """
     target_name = cfg["target"]["name_match"]
+    school_match = cfg["target"].get("school_match")
+    timing = cfg["timing"]
     debug_dir = (ROOT / "data" / "debug") if debug else None
     heartbeat = ROOT / "data" / "heartbeat.json"
+    max_per_session = int(timing.get("max_votes_per_session", 3))
+    revote_delay = timing.get("revote_delay_sec", [45, 120])
 
     if not force_vote:
         ok, reason = should_open_browser(cfg, state, scheduler_path)
@@ -231,21 +231,59 @@ async def run_one_cycle(
         browser = await launch_browser(p, cfg)
         context = await create_context(browser, cfg, proxy)
         page = await context.new_page()
+        decision: Decision | None = None
         try:
-            standings = await submit_vote(page, cfg, debug_dir=debug_dir)
-            save_standings_snapshot(
-                ROOT / "data" / "latest_standings.json", standings, target_name
+            frame = await navigate_and_prepare_poll(
+                page, cfg["poll"]["url"], cfg, debug_dir=debug_dir
             )
-            log_standings(standings, target_name)
 
-            state.record_vote(datetime.now(timezone.utc))
-            save_state(state_path, state)
+            for vote_num in range(1, max_per_session + 1):
+                if vote_num > 1:
+                    logger.info(
+                        'Clicking "Return to the poll!" for revote %s/%s',
+                        vote_num,
+                        max_per_session,
+                    )
+                    await return_to_poll(frame)
+                    await asyncio.sleep(random.uniform(
+                        float(revote_delay[0]), float(revote_delay[1])
+                    ))
 
-            decision = decide(cfg, state, standings)
-            if force_vote:
-                decision = Decision(Action.VOTE, "Single test vote completed", wait_sec=0)
+                await cast_vote(frame, target_name, school_match)
+                standings = await parse_standings_from_dom(frame)
+                save_standings_snapshot(
+                    ROOT / "data" / "latest_standings.json", standings, target_name
+                )
+                log_standings(standings, target_name)
 
-            logger.info("Decision: %s — %s", decision.action.value, decision.reason)
+                state.record_vote(datetime.now(timezone.utc))
+                save_state(state_path, state)
+
+                decision = decide(cfg, state, standings)
+                if force_vote:
+                    decision = Decision(Action.VOTE, "Single test vote completed", wait_sec=0)
+                    logger.info("Decision: %s — %s", decision.action.value, decision.reason)
+                    break
+
+                logger.info(
+                    "Decision: %s — %s (vote %s in session)",
+                    decision.action.value,
+                    decision.reason,
+                    vote_num,
+                )
+
+                if decision.action != Action.VOTE:
+                    break
+                if state.votes_this_hour >= int(timing["max_votes_per_hour"]):
+                    logger.info("Hourly cap hit — ending session")
+                    break
+                if vote_num >= max_per_session:
+                    logger.info("Max votes per session reached")
+                    break
+
+            if decision is None:
+                raise RuntimeError("No vote completed in cycle")
+
             wait = decision.wait_sec or random.uniform(120, 300)
             schedule_next_cycle(
                 scheduler_path,

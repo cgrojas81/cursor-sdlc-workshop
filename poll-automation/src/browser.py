@@ -435,13 +435,16 @@ async def cast_vote(frame: Frame, name_match: str, school_match: str | None) -> 
 
 
 async def return_to_poll(frame: Frame) -> None:
-    """Click 'Return to the poll!' link on the results screen."""
+    """Click 'Return to the poll!' on the results screen to revote (same as manual flow)."""
     link = frame.get_by_role("link", name=re.compile(r"return to the poll", re.I))
     if await link.count() == 0:
-        link = frame.locator("text=/return to the poll/i")
+        link = frame.locator("text=/return to the poll!?/i")
+    if await link.count() == 0:
+        link = frame.locator("a:has-text('Return'), button:has-text('Return')")
     await link.first.scroll_into_view_if_needed()
     await link.first.click()
     await wait_for_poll_options(frame, timeout_ms=30000)
+    logger.info('Returned to poll form via "Return to the poll!"')
 
 
 async def navigate_and_prepare_poll(

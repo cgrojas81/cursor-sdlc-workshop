@@ -20,6 +20,9 @@ timing:
   max_votes_per_hour: 4
   max_votes_per_day: 60
   ramp_hours: 48
+  # Revotes in same browser session via "Return to the poll!" (no full page reload)
+  max_votes_per_session: 3
+  revote_delay_sec: [45, 120]
 
 browser:
   # Headed mode matched your successful manual test on Mac.
