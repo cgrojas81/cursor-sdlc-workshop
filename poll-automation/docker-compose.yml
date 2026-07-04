@@ -1,0 +1,9 @@
+services:
+  poll-bot:
+    build: .
+    restart: "no"
+    volumes:
+      - ./data:/app/data
+      - ./proxies.txt:/app/proxies.txt:ro
+    environment:
+      - PROXY_LIST=${PROXY_LIST:-}

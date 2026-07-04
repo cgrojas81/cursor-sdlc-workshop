@@ -1,0 +1,44 @@
+# Aggressive pacing: ~1000 votes over ~3 days until poll close (Jul 7 8pm ET).
+# Requires reliable 24/7 daemon + residential proxies strongly recommended.
+#
+# Start:  ./scripts/start-nohup.sh
+# Proxies: copy proxies.txt.example → proxies.txt (one proxy URL per line)
+
+poll:
+  url: "https://www.phillyburbs.com/story/sports/high-school/softball/2026/06/29/vote-bucks-county-top-freshman-softball-player-class-of-2029-pennsbury-neshaminy-quakertown/89896794007/"
+  deadline: "2026-07-07T20:00:00-04:00"
+
+target:
+  name_match: "Markella Hadgimallis"
+  school_match: "Villa Joseph Marie"
+
+margin:
+  min_lead_pct: 2.0
+  max_lead_pct: 3.0
+
+timing:
+  poll_load_timeout_sec: 60
+  iframe_load_timeout_sec: 90
+  page_settle_sec: 5
+  post_scroll_wait_sec: 10
+  # Pause between browser sessions (after a batch of iframe revotes)
+  vote_delay_sec: [300, 600]
+  monitor_delay_sec: [900, 1800]
+  # ~18 sessions/hr × up to 20 revotes ≈ high throughput when trailing
+  max_votes_per_hour: 18
+  max_votes_per_day: 400
+  ramp_hours: 0
+  max_votes_per_session: 20
+  revote_delay_sec: [15, 45]
+
+browser:
+  headless: false
+  slow_mo_ms: 30
+  # Prefer installed Chrome on Mac if Chromium acts up:
+  # channel: chrome
+  storage_state: null
+  proxy: null
+
+logging:
+  state_file: "data/state.json"
+  log_file: "data/run.log"
